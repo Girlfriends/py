@@ -14,23 +14,45 @@ V py::lib_setup()
 {
 	post("");
 	post("py/pyext %s - python script objects, (C)2002-2004 Thomas Grill",PY__VERSION);
-	post("");
 
-	FLEXT_SETUP(pyobj);
+
+    // enable thread support and acquire the global thread lock
+    PyEval_InitThreads();
+
+    Py_Initialize();
+
+    // get thread state
+    PyThreadState *pythrmain = PyThreadState_Get();
+    // get main interpreter state
+//	pystate = pythrmain->interp;
+
+    // register/initialize pyext module only once!
+	module_obj = Py_InitModule(PYEXT_MODULE, func_tbl);
+	module_dict = PyModule_GetDict(module_obj);
+
+	PyModule_AddStringConstant(module_obj,"__doc__",(C *)py_doc);
+
+    post("Python %s",Py_GetVersion());
+
+    // release global lock
+    PyEval_ReleaseLock();
+
+
+    FLEXT_SETUP(pyobj);
 	FLEXT_SETUP(pyext);
 
-	pyref = 0;
+	post("");
 }
 
 FLEXT_LIB_SETUP(py,py::lib_setup)
 
-PyInterpreterState *py::pystate = NULL;
+//PyInterpreterState *py::pystate = NULL;
 
-#ifdef FLEXT_THREADS
+#if 0 //def FLEXT_THREADS
 std::map<flext::thrid_t,PyThreadState *> py::pythrmap;
 #endif
 
-I py::pyref = 0;
+//I py::pyref = 0;
 PyObject *py::module_obj = NULL;
 PyObject *py::module_dict = NULL;
 
@@ -40,41 +62,9 @@ py::py():
 	detach(false),shouldexit(false),thrcount(0),
 	stoptick(0)
 {
-	Lock();
-
-	if(!(pyref++)) {
-		Py_Initialize();
-
-	#ifdef FLEXT_THREADS
-        // enable thread support and acquire the global thread lock
-		PyEval_InitThreads();
-
-        // get thread state
-        PyThreadState *pythrmain = PyThreadState_Get();
-        // get main interpreter state
-		pystate = pythrmain->interp;
-
-        // release global lock
-        PyEval_ReleaseLock();
-
-        // add thread state of main thread to map
-        pythrmap[GetThreadId()] = pythrmain;
-    #endif
-
-        // register/initialize pyext module only once!
-		module_obj = Py_InitModule(PYEXT_MODULE, func_tbl);
-		module_dict = PyModule_GetDict(module_obj);
-
-		PyModule_AddStringConstant(module_obj,"__doc__",(C *)py_doc);
-	}
-	else {
-		PY_LOCK
-		Py_INCREF(module_obj);
-		Py_INCREF(module_dict);
-		PY_UNLOCK
-	}
-
-	Unlock();
+    PyEval_AcquireLock();
+    interp = PyThreadState_Get(); //Py_NewInterpreter();
+    PyEval_ReleaseLock();
 
     FLEXT_ADDTIMER(stoptmr,tick);
 }
@@ -92,39 +82,11 @@ py::~py()
 		while(thrcount) Sleep(0.2f);
 		post("%s - Okay, all threads have terminated",thisName());
 	}
-		
-	Lock();
 
-    if(!(--pyref)) {
-        // no more py/pyext objects left... shut down Python
-
-		module_obj = NULL;
-		module_dict = NULL;
-
-		Py_XDECREF(module);
-
-        PyEval_AcquireLock();
-
-#ifdef FLEXT_THREADS
-		PyThreadState_Swap(pythrmap[GetThreadId()]);
-#endif
-
-#if 0 //def FLEXT_DEBUG
-        // need not necessarily do that....
-        Py_Finalize();
-#endif
-
-#ifdef FLEXT_THREADS
-        // reset thread state map
-        pythrmap.clear();
-#endif
-	}
-    else {
-    	Py_DECREF(module_obj);
-	    Py_DECREF(module_dict);
-    }
-
-	Unlock();
+    PyEval_AcquireLock();
+    PyThreadState_Swap(interp);
+//    Py_EndInterpreter(interp);
+    PyEval_ReleaseLock();
 }
 
 

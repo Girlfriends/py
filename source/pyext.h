@@ -70,9 +70,9 @@ private:
 
 	AtomList args;
 
-	virtual V Reload();
+	virtual void Reload();
 
-	static I pyextref;
+//	static I pyextref;
 	static PyObject *class_obj,*class_dict;
 	static PyMethodDef attr_tbl[],meth_tbl[];
 	static const C *pyext_doc;
@@ -82,6 +82,8 @@ private:
 	static PyObject *pyext_unbind(PyObject *,PyObject *args);
 
 	// ---------------------------
+
+    void RegClass();
 
 	PyObject *call(const C *meth,I inlet,const t_symbol *s,I argc,const t_atom *argv);
 

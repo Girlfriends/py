@@ -74,7 +74,7 @@ protected:
 
 	PyObject *module,*dict; // inherited user class module and associated dictionary
 
-	static I pyref;
+//	static I pyref;
 	static const C *py_doc;
 
     V GetDir(PyObject *obj,AtomList &lst);
@@ -124,10 +124,11 @@ protected:
 	V tick(V *);
 
 public:
-	static PyInterpreterState *pystate;
+//	static PyInterpreterState *pystate;
+    PyThreadState *interp;
 
-#ifdef FLEXT_THREADS
-    static std::map<flext::thrid_t,PyThreadState *> pythrmap;
+#if 0 //def FLEXT_THREADS
+    static std::map<thrid_t,PyThreadState *> pythrmap;
 	ThrMutex mutex;
 	V Lock() { mutex.Unlock(); }
 	V Unlock() { mutex.Unlock(); }
@@ -150,10 +151,11 @@ protected:
 
 #ifdef FLEXT_THREADS
 
+/*
 #define PY_LOCK \
 	{ \
     PyEval_AcquireLock(); \
-    PyThreadState *__st = pythrmap[GetThreadId()]; \
+    PyThreadState *__st = pythrmap[this]; \
     FLEXT_ASSERT(__st != NULL); \
 	PyThreadState *__oldst = PyThreadState_Swap(__st);
 
@@ -161,6 +163,21 @@ protected:
     PyThreadState_Swap(__oldst); \
     PyEval_ReleaseLock(); \
     }
+*/
+
+#define PY_LOCK_(thrst) \
+	{ \
+    PyEval_AcquireLock(); \
+	PyThreadState *__oldst = PyThreadState_Swap(thrst);
+
+#define PY_LOCK PY_LOCK_(this->interp)
+
+#define PY_UNLOCK \
+    PyThreadState_Swap(__oldst); \
+    PyEval_ReleaseLock(); \
+    }
+
+
 
 #else
 #define PY_LOCK 

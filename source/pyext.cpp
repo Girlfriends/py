@@ -13,6 +13,12 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 FLEXT_LIB_V("pyext pyx",pyext)
 
+
+//I pyext::pyextref = 0;
+PyObject *pyext::class_obj = NULL;
+PyObject *pyext::class_dict = NULL;
+
+
 V pyext::Setup(t_classid c)
 {
 	FLEXT_CADDMETHOD_(c,0,"reload.",m_reload);
@@ -34,6 +40,46 @@ V pyext::Setup(t_classid c)
 	FLEXT_CADDMETHOD_(c,0,"set",m_set);
 
   	FLEXT_CADDATTR_VAR1(c,"respond",respond);
+}
+
+void pyext::RegClass()
+{
+    PY_LOCK
+
+	// register/initialize pyext base class along with module
+	class_dict = PyDict_New();
+	PyObject *className = PyString_FromString(PYEXT_CLASS);
+	PyMethodDef *def;
+
+	// add setattr/getattr to class 
+	for(def = attr_tbl; def->ml_name; def++) {
+		PyObject *func = PyCFunction_New(def, NULL);
+		PyDict_SetItemString(class_dict, def->ml_name, func);
+		Py_DECREF(func);
+	}
+
+	class_obj = PyClass_New(NULL, class_dict, className);
+	PyDict_SetItemString(module_dict, PYEXT_CLASS,class_obj);
+	Py_DECREF(className);
+
+	// add methods to class 
+	for (def = meth_tbl; def->ml_name != NULL; def++) {
+		PyObject *func = PyCFunction_New(def, NULL);
+		PyObject *method = PyMethod_New(func, NULL, class_obj);
+		PyDict_SetItemString(class_dict, def->ml_name, method);
+		Py_DECREF(func);
+		Py_DECREF(method);
+	}
+
+#if PY_VERSION_HEX >= 0x02020000
+	// not absolutely necessary, existent in python 2.2 upwards
+	// make pyext functions available in class scope
+	PyDict_Merge(class_dict,module_dict,0);
+#endif
+
+	PyDict_SetItemString(class_dict,"__doc__",PyString_FromString(pyext_doc));
+
+    PY_UNLOCK
 }
 
 pyext *pyext::GetThis(PyObject *self)
@@ -60,10 +106,6 @@ static short patcher_myvol(t_patcher *x)
 #endif
 
 
-I pyext::pyextref = 0;
-PyObject *pyext::class_obj = NULL;
-PyObject *pyext::class_dict = NULL;
-
 pyext::pyext(I argc,const t_atom *argv):
 	pyobj(NULL),pythr(NULL),
 	inlets(-1),outlets(-1),
@@ -71,46 +113,11 @@ pyext::pyext(I argc,const t_atom *argv):
 { 
     int apre = 0;
 
+    // the py constructor made a new interpreter for this object
+    // now register pyext base class
+    RegClass();
+
     PY_LOCK
-
-	if(!pyextref++) {
-		// register/initialize pyext base class along with module
-		class_dict = PyDict_New();
-		PyObject *className = PyString_FromString(PYEXT_CLASS);
-		PyMethodDef *def;
-
-		// add setattr/getattr to class 
-		for(def = attr_tbl; def->ml_name; def++) {
-			  PyObject *func = PyCFunction_New(def, NULL);
-			  PyDict_SetItemString(class_dict, def->ml_name, func);
-			  Py_DECREF(func);
-		}
-
-		class_obj = PyClass_New(NULL, class_dict, className);
-		PyDict_SetItemString(module_dict, PYEXT_CLASS,class_obj);
-		Py_DECREF(className);
-    
-		// add methods to class 
-		for (def = meth_tbl; def->ml_name != NULL; def++) {
-			PyObject *func = PyCFunction_New(def, NULL);
-			PyObject *method = PyMethod_New(func, NULL, class_obj);
-			PyDict_SetItemString(class_dict, def->ml_name, method);
-			Py_DECREF(func);
-			Py_DECREF(method);
-		}
-
-#if PY_VERSION_HEX >= 0x02020000
-		// not absolutely necessary, existent in python 2.2 upwards
-		// make pyext functions available in class scope
-		PyDict_Merge(class_dict,module_dict,0);
-#endif
-
-		PyDict_SetItemString(class_dict,"__doc__",PyString_FromString(pyext_doc));
- 	}
-	else {
-		Py_INCREF(class_obj);
-		Py_INCREF(class_dict);
-	}
 
     if(argc >= apre+2 && CanbeInt(argv[apre]) && CanbeInt(argv[apre+1])) {
         inlets = GetAInt(argv[apre]);
@@ -225,15 +232,11 @@ pyext::~pyext()
 	
 	Unregister("_pyext");
 
+/*
 	Py_XDECREF(pyobj);
 	Py_XDECREF(class_obj);
 	Py_XDECREF(class_dict);
-
-	if(!--pyextref) {
-		class_obj = NULL;
-		class_dict = NULL;
-	}
-
+*/
 	PY_UNLOCK
 }
 
@@ -472,14 +475,14 @@ V pyext::work_wrapper(V *data)
         PyEval_AcquireLock();
         // get a reference to the PyInterpreterState
         // create a thread state object for this thread
-        PyThreadState *newthr = PyThreadState_New(pystate);
+        PyThreadState *newthr = PyThreadState_New(interp->interp);
         // free the lock
         PyEval_ReleaseLock();
         // -----------------------------
 
         // store new thread state
 #ifdef FLEXT_THREADS
-        pythrmap[GetThreadId()] = newthr;
+//        pythrmap[GetThreadId()] = newthr;
 #endif
         {
             // call worker
@@ -490,7 +493,7 @@ V pyext::work_wrapper(V *data)
 
 #ifdef FLEXT_THREADS
         // delete mapped thread state
-        pythrmap.erase(GetThreadId());
+//        pythrmap.erase(GetThreadId());
 #endif
 
         // --- delete Python thread ---

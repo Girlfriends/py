@@ -13,6 +13,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 struct bounddata 
 { 
+    PyThreadState *thrst;
     PyObject *self;
     std::set<PyObject *> funcs;
 };
@@ -21,7 +22,7 @@ bool pyext::boundmeth(flext_base *,t_symbol *sym,int argc,t_atom *argv,void *dat
 {
     bounddata *obj = (bounddata *)data;
 
-	PY_LOCK
+	PY_LOCK_(obj->thrst);
 
 	PyObject *args = MakePyArgs(sym,AtomList(argc,argv),-1,obj->self != NULL);
 
@@ -62,19 +63,21 @@ PyObject *pyext::pyext_bind(PyObject *,PyObject *args)
 		}
 
         void *data = NULL;
-        if(GetThis(self)->GetBoundMethod(recv,boundmeth,data)) {
+        py *th = GetThis(self);
+        if(th->GetBoundMethod(recv,boundmeth,data)) {
             // already bound to that symbol and function
             bounddata *bdt = (bounddata *)data;
             FLEXT_ASSERT(bdt != NULL && bdt->self == self);
             bdt->funcs.insert(meth);
         }
         else {
+    		Py_INCREF(self); // self is borrowed reference
+
             bounddata *data = new bounddata;
             data->self = self;
             data->funcs.insert(meth);
-            GetThis(self)->BindMethod(recv,boundmeth,data);
-
-    		Py_INCREF(self); // self is borrowed reference
+            data->thrst = th->interp;
+            th->BindMethod(recv,boundmeth,data);
         }
 	}
 
