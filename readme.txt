@@ -27,9 +27,9 @@ Goals/features of the package:
 Access the flexibility of the python language in PD and MaxMSP
 
 
-PD - Load it as i library with e.g. "pd -lib py -path scripts"
+PD - Load it as a library with e.g. "pd -lib py -path scripts"
 
-Max/MSP - Wait for Windows or a Mach-O MacOSX version. MacOS9 doesn't want it.
+Max/MSP - Wait for Windows or a Mach-O MacOSX version. CFM doesn't want it.
 
 
 Check out the sample patches and scripts
