@@ -10,6 +10,7 @@ WARRANTIES, see the file, "license.txt," in this distribution.
 
 #include "pyext.h"
 #include "flinternal.h"
+#include <set>
 
 struct bounddata 
 { 
