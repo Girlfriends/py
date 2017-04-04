@@ -28,3 +28,7 @@
 *.app
 config.txt
 .DS_Store
+
+# Xcode user
+py.xcodeproj/xcuserdata/
+py.xcodeproj/project.xcworkspace/xcuserdata/
